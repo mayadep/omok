@@ -65,7 +65,7 @@ export function GameScreen({ opponent, onHome, onRematch }: Props) {
     setTimeout(() => {
       playResult(outcome === "win");
       setResult({ outcome, reason: game.status === "draw" ? "draw" : reason, ...delta });
-    }, reason === "five" ? (game.winLine?.length ?? 5) * BURST_GAP + 1300 : 1100);
+    }, reason === "five" ? (game.winLine?.length ?? 5) * BURST_GAP + 1600 : 1100);
   };
 
   const applyMove = (x: number, y: number) => {

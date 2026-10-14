@@ -29,6 +29,8 @@ interface Particle {
   life: number;
   size: number;
   color: number;
+  /** 불꽃(꼬리를 그리며 날아감) / 돌 파편 */
+  spark: boolean;
 }
 
 interface Flash {
@@ -39,9 +41,10 @@ interface Flash {
 
 const GOLD = 0xf3c969;
 /** 5목 폭발: 돌 사이 간격(ms) */
-export const BURST_GAP = 150;
+export const BURST_GAP = 300;
 /** 5목 폭발: 마지막 돌이 터진 뒤 승리선이 떠오르기까지(ms) */
 const BURST_TAIL = 250;
+const SPARK_COLORS = [0xf3c969, 0xfff3c4, 0xffb347, 0xff7a3d, 0xffffff];
 /** 돌 지름 / 칸 크기. 1보다 작아야 이웃한 돌끼리 겹치지 않는다. */
 const STONE_RATIO = 0.9;
 const key = (x: number, y: number) => y * N + x;
@@ -366,19 +369,20 @@ export class BoardRenderer {
     const shard = black ? 0x1d1d22 : 0xf4f1ea;
 
     this.flashes.push({ x, y, age: 0 });
-    for (let n = 0; n < 22; n++) {
+    for (let n = 0; n < 64; n++) {
       const a = Math.random() * Math.PI * 2;
-      const speed = c * (2.5 + Math.random() * 4.5);
-      const spark = n % 3 === 0;
+      const spark = n % 4 !== 0;
+      const speed = c * (spark ? 5 + Math.random() * 8 : 2.5 + Math.random() * 4);
       this.particles.push({
         x,
         y,
         vx: Math.cos(a) * speed,
-        vy: Math.sin(a) * speed - c * 1.5,
+        vy: Math.sin(a) * speed - c * 2,
         age: 0,
-        life: 450 + Math.random() * 450,
-        size: c * (spark ? 0.05 + Math.random() * 0.04 : 0.07 + Math.random() * 0.07),
-        color: spark ? (Math.random() < 0.5 ? GOLD : 0xfff3c4) : shard,
+        life: spark ? 700 + Math.random() * 700 : 500 + Math.random() * 400,
+        size: c * (spark ? 0.06 + Math.random() * 0.06 : 0.1 + Math.random() * 0.1),
+        color: spark ? SPARK_COLORS[(Math.random() * SPARK_COLORS.length) | 0] : shard,
+        spark,
       });
     }
 
@@ -389,7 +393,7 @@ export class BoardRenderer {
       view.stone.scale.set(s0 * k2);
     }, () => view.stone.scale.set(s0));
 
-    this.shake = Math.max(this.shake, c * (0.06 + i * 0.012));
+    this.shake = Math.max(this.shake, c * (0.09 + i * 0.02));
     this.opts.onBurst?.(i);
   }
 
@@ -403,14 +407,15 @@ export class BoardRenderer {
     for (let i = this.flashes.length - 1; i >= 0; i--) {
       const f = this.flashes[i];
       f.age += dt;
-      const p = f.age / 380;
+      const p = f.age / 520;
       if (p >= 1) {
         this.flashes.splice(i, 1);
         continue;
       }
       const e = 1 - Math.pow(1 - p, 3);
-      g.circle(f.x, f.y, c * (0.3 + e * 0.5)).fill({ color: 0xfff3c4, alpha: 0.75 * (1 - p) });
-      g.circle(f.x, f.y, c * (0.45 + e * 1.3)).stroke({ width: Math.max(1.5, c * 0.09 * (1 - p)), color: GOLD, alpha: 0.9 * (1 - p) });
+      g.circle(f.x, f.y, c * (0.4 + e * 0.9)).fill({ color: 0xfff3c4, alpha: 0.8 * (1 - p) });
+      g.circle(f.x, f.y, c * (0.5 + e * 2.4)).stroke({ width: Math.max(2, c * 0.14 * (1 - p)), color: GOLD, alpha: 0.95 * (1 - p) });
+      g.circle(f.x, f.y, c * (0.4 + e * 1.6)).stroke({ width: Math.max(1, c * 0.07 * (1 - p)), color: 0xff7a3d, alpha: 0.7 * (1 - p) });
     }
 
     for (let i = this.particles.length - 1; i >= 0; i--) {
@@ -420,12 +425,20 @@ export class BoardRenderer {
         this.particles.splice(i, 1);
         continue;
       }
-      q.vx *= Math.pow(0.12, s);
-      q.vy = q.vy * Math.pow(0.12, s) + c * 9 * s;
+      q.vx *= Math.pow(0.15, s);
+      q.vy = q.vy * Math.pow(0.15, s) + c * 7 * s;
       q.x += q.vx * s;
       q.y += q.vy * s;
       const k = 1 - q.age / q.life;
-      g.circle(q.x, q.y, q.size * (0.4 + 0.6 * k)).fill({ color: q.color, alpha: Math.min(1, k * 1.6) });
+      const alpha = Math.min(1, k * 1.6);
+      if (q.spark) {
+        // 속도 방향으로 꼬리를 그려 불꽃처럼 보이게
+        const tail = 0.06;
+        g.moveTo(q.x - q.vx * tail, q.y - q.vy * tail).lineTo(q.x, q.y).stroke({ width: q.size * (0.5 + 0.5 * k), color: q.color, alpha: alpha * 0.8, cap: "round" });
+        g.circle(q.x, q.y, q.size * (0.5 + 0.5 * k)).fill({ color: 0xffffff, alpha });
+      } else {
+        g.circle(q.x, q.y, q.size * (0.4 + 0.6 * k)).fill({ color: q.color, alpha });
+      }
     }
   }
 
