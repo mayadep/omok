@@ -41,9 +41,11 @@ interface Flash {
 
 const GOLD = 0xf3c969;
 /** 5목 폭발: 돌 사이 간격(ms) */
-export const BURST_GAP = 300;
+export const BURST_GAP = 200;
 /** 5목 폭발: 마지막 돌이 터진 뒤 승리선이 떠오르기까지(ms) */
 const BURST_TAIL = 250;
+/** 불꽃 세기 배율 (개수, 속도, 크기, 섬광) */
+const FLAME = 1.2;
 const SPARK_COLORS = [0xf3c969, 0xfff3c4, 0xffb347, 0xff7a3d, 0xffffff];
 /** 돌 지름 / 칸 크기. 1보다 작아야 이웃한 돌끼리 겹치지 않는다. */
 const STONE_RATIO = 0.9;
@@ -369,10 +371,10 @@ export class BoardRenderer {
     const shard = black ? 0x1d1d22 : 0xf4f1ea;
 
     this.flashes.push({ x, y, age: 0 });
-    for (let n = 0; n < 64; n++) {
+    for (let n = 0; n < Math.round(64 * FLAME); n++) {
       const a = Math.random() * Math.PI * 2;
       const spark = n % 4 !== 0;
-      const speed = c * (spark ? 5 + Math.random() * 8 : 2.5 + Math.random() * 4);
+      const speed = c * FLAME * (spark ? 5 + Math.random() * 8 : 2.5 + Math.random() * 4);
       this.particles.push({
         x,
         y,
@@ -380,7 +382,7 @@ export class BoardRenderer {
         vy: Math.sin(a) * speed - c * 2,
         age: 0,
         life: spark ? 700 + Math.random() * 700 : 500 + Math.random() * 400,
-        size: c * (spark ? 0.06 + Math.random() * 0.06 : 0.1 + Math.random() * 0.1),
+        size: c * FLAME * (spark ? 0.06 + Math.random() * 0.06 : 0.1 + Math.random() * 0.1),
         color: spark ? SPARK_COLORS[(Math.random() * SPARK_COLORS.length) | 0] : shard,
         spark,
       });
@@ -413,9 +415,9 @@ export class BoardRenderer {
         continue;
       }
       const e = 1 - Math.pow(1 - p, 3);
-      g.circle(f.x, f.y, c * (0.4 + e * 0.9)).fill({ color: 0xfff3c4, alpha: 0.8 * (1 - p) });
-      g.circle(f.x, f.y, c * (0.5 + e * 2.4)).stroke({ width: Math.max(2, c * 0.14 * (1 - p)), color: GOLD, alpha: 0.95 * (1 - p) });
-      g.circle(f.x, f.y, c * (0.4 + e * 1.6)).stroke({ width: Math.max(1, c * 0.07 * (1 - p)), color: 0xff7a3d, alpha: 0.7 * (1 - p) });
+      g.circle(f.x, f.y, c * FLAME * (0.4 + e * 0.9)).fill({ color: 0xfff3c4, alpha: 0.8 * (1 - p) });
+      g.circle(f.x, f.y, c * FLAME * (0.5 + e * 2.4)).stroke({ width: Math.max(2, c * 0.14 * (1 - p)), color: GOLD, alpha: 0.95 * (1 - p) });
+      g.circle(f.x, f.y, c * FLAME * (0.4 + e * 1.6)).stroke({ width: Math.max(1, c * 0.07 * (1 - p)), color: 0xff7a3d, alpha: 0.7 * (1 - p) });
     }
 
     for (let i = this.particles.length - 1; i >= 0; i--) {
