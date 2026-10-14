@@ -11,6 +11,8 @@ export interface BoardState {
 
 export interface BoardOptions {
   onPlace: (x: number, y: number) => void;
+  /** 5목 폭발 연출에서 i번째 돌이 터질 때 (효과음용) */
+  onBurst?: (i: number) => void;
 }
 
 interface StoneView {
@@ -18,7 +20,31 @@ interface StoneView {
   shadow: Sprite;
 }
 
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  age: number;
+  life: number;
+  size: number;
+  color: number;
+  /** 불꽃(꼬리를 그리며 날아감) / 돌 파편 */
+  spark: boolean;
+}
+
+interface Flash {
+  x: number;
+  y: number;
+  age: number;
+}
+
 const GOLD = 0xf3c969;
+/** 5목 폭발: 돌 사이 간격(ms) */
+export const BURST_GAP = 300;
+/** 5목 폭발: 마지막 돌이 터진 뒤 승리선이 떠오르기까지(ms) */
+const BURST_TAIL = 250;
+const SPARK_COLORS = [0xf3c969, 0xfff3c4, 0xffb347, 0xff7a3d, 0xffffff];
 /** 돌 지름 / 칸 크기. 1보다 작아야 이웃한 돌끼리 겹치지 않는다. */
 const STONE_RATIO = 0.9;
 const key = (x: number, y: number) => y * N + x;
@@ -45,6 +71,7 @@ export class BoardRenderer {
   private fx = new Graphics();
   private ghost = new Sprite();
   private winG = new Graphics();
+  private burstG = new Graphics();
 
   private views = new Map<number, StoneView>();
   private textures: { black: Texture; white: Texture; shadow: Texture } | null = null;
@@ -55,6 +82,12 @@ export class BoardRenderer {
   private hover: Point | null = null;
   private tweens: { t: number; dur: number; update: (p: number) => void; done?: () => void }[] = [];
   private clock = 0;
+
+  private winKey = "";
+  private winGlow = 0;
+  private particles: Particle[] = [];
+  private flashes: Flash[] = [];
+  private shake = 0;
 
   static async create(host: HTMLElement, opts: BoardOptions): Promise<BoardRenderer> {
     const r = new BoardRenderer();
@@ -87,7 +120,7 @@ export class BoardRenderer {
     this.ghost.anchor.set(0.5);
     this.ghost.visible = false;
     this.ghost.alpha = 0.5;
-    stage.addChild(this.wood, this.grid, this.labels, this.forbiddenG, this.shadows, this.stones, this.marker, this.fx, this.winG, this.ghost);
+    stage.addChild(this.wood, this.grid, this.labels, this.forbiddenG, this.shadows, this.stones, this.marker, this.fx, this.winG, this.burstG, this.ghost);
 
     stage.eventMode = "static";
     stage.on("pointermove", (e) => this.onMove(e));
@@ -119,7 +152,7 @@ export class BoardRenderer {
     if (!this.textures) return;
     this.syncStones();
     this.drawForbidden();
-    this.drawWin();
+    this.drawWin(true);
   }
 
   /** color 를 주면 그 색으로 둘 수 있는 상태, null 이면 입력을 받지 않는다 */
@@ -164,7 +197,7 @@ export class BoardRenderer {
     this.known = 0;
     this.syncStones(false);
     this.drawForbidden();
-    this.drawWin();
+    this.drawWin(false);
     this.refreshGhost();
   }
 
@@ -293,11 +326,15 @@ export class BoardRenderer {
     g.stroke({ width: Math.max(1.5, this.cell * 0.07), color: 0xc2332a, alpha: 0.85, cap: "round" });
   }
 
-  private drawWin() {
+  private drawWin(animate: boolean) {
     const g = this.winG;
     g.clear();
     const line = this.state.winLine;
-    if (!line || line.length < 2) return;
+    if (!line || line.length < 2) {
+      this.winKey = "";
+      this.winGlow = 0;
+      return;
+    }
     const first = line[0];
     const last = line[line.length - 1];
     const draw = (width: number, alpha: number) => {
@@ -307,8 +344,102 @@ export class BoardRenderer {
     draw(this.cell * 0.5, 0.25);
     draw(this.cell * 0.12, 0.95);
     for (const pt of line) g.circle(this.p(pt.x), this.p(pt.y), this.cell * 0.4).stroke({ width: Math.max(2, this.cell * 0.06), color: GOLD, alpha: 0.9 });
-    g.alpha = 0;
-    this.tween(500, (p) => (g.alpha = p));
+
+    const k = line.map((pt) => key(pt.x, pt.y)).join(",");
+    if (k === this.winKey) return;
+    this.winKey = k;
+    if (!animate) {
+      this.winGlow = 1;
+      return;
+    }
+    // 처음 5목이 생긴 순간: 돌이 하나씩 터진 다음 승리선이 떠오른다
+    this.winGlow = 0;
+    line.forEach((pt, i) => this.after(i * BURST_GAP, () => this.burst(pt, i)));
+    this.after(line.length * BURST_GAP + BURST_TAIL, () => this.tween(500, (p) => (this.winGlow = p)));
+  }
+
+  /** 돌 하나가 터지는 연출: 섬광 + 파편 + 돌이 튀었다 돌아옴 + 판 흔들림 */
+  private burst(pt: Point, i: number) {
+    const view = this.views.get(key(pt.x, pt.y));
+    if (!view) return;
+    const x = this.p(pt.x);
+    const y = this.p(pt.y);
+    const c = this.cell;
+    const black = view.stone.texture === this.textures?.black;
+    const shard = black ? 0x1d1d22 : 0xf4f1ea;
+
+    this.flashes.push({ x, y, age: 0 });
+    for (let n = 0; n < 64; n++) {
+      const a = Math.random() * Math.PI * 2;
+      const spark = n % 4 !== 0;
+      const speed = c * (spark ? 5 + Math.random() * 8 : 2.5 + Math.random() * 4);
+      this.particles.push({
+        x,
+        y,
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed - c * 2,
+        age: 0,
+        life: spark ? 700 + Math.random() * 700 : 500 + Math.random() * 400,
+        size: c * (spark ? 0.06 + Math.random() * 0.06 : 0.1 + Math.random() * 0.1),
+        color: spark ? SPARK_COLORS[(Math.random() * SPARK_COLORS.length) | 0] : shard,
+        spark,
+      });
+    }
+
+    const s0 = view.stone.scale.x;
+    this.tween(320, (p) => {
+      // 크게 부풀었다가 탄성 있게 제자리로
+      const k2 = p < 0.3 ? 1 + (p / 0.3) * 0.38 : 1 + 0.38 * Math.exp(-(p - 0.3) * 9) * Math.cos((p - 0.3) * 18);
+      view.stone.scale.set(s0 * k2);
+    }, () => view.stone.scale.set(s0));
+
+    this.shake = Math.max(this.shake, c * (0.09 + i * 0.02));
+    this.opts.onBurst?.(i);
+  }
+
+  private drawBursts(dt: number) {
+    const g = this.burstG;
+    g.clear();
+    if (!this.particles.length && !this.flashes.length) return;
+    const c = this.cell;
+    const s = dt / 1000;
+
+    for (let i = this.flashes.length - 1; i >= 0; i--) {
+      const f = this.flashes[i];
+      f.age += dt;
+      const p = f.age / 520;
+      if (p >= 1) {
+        this.flashes.splice(i, 1);
+        continue;
+      }
+      const e = 1 - Math.pow(1 - p, 3);
+      g.circle(f.x, f.y, c * (0.4 + e * 0.9)).fill({ color: 0xfff3c4, alpha: 0.8 * (1 - p) });
+      g.circle(f.x, f.y, c * (0.5 + e * 2.4)).stroke({ width: Math.max(2, c * 0.14 * (1 - p)), color: GOLD, alpha: 0.95 * (1 - p) });
+      g.circle(f.x, f.y, c * (0.4 + e * 1.6)).stroke({ width: Math.max(1, c * 0.07 * (1 - p)), color: 0xff7a3d, alpha: 0.7 * (1 - p) });
+    }
+
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const q = this.particles[i];
+      q.age += dt;
+      if (q.age >= q.life) {
+        this.particles.splice(i, 1);
+        continue;
+      }
+      q.vx *= Math.pow(0.15, s);
+      q.vy = q.vy * Math.pow(0.15, s) + c * 7 * s;
+      q.x += q.vx * s;
+      q.y += q.vy * s;
+      const k = 1 - q.age / q.life;
+      const alpha = Math.min(1, k * 1.6);
+      if (q.spark) {
+        // 속도 방향으로 꼬리를 그려 불꽃처럼 보이게
+        const tail = 0.06;
+        g.moveTo(q.x - q.vx * tail, q.y - q.vy * tail).lineTo(q.x, q.y).stroke({ width: q.size * (0.5 + 0.5 * k), color: q.color, alpha: alpha * 0.8, cap: "round" });
+        g.circle(q.x, q.y, q.size * (0.5 + 0.5 * k)).fill({ color: 0xffffff, alpha });
+      } else {
+        g.circle(q.x, q.y, q.size * (0.4 + 0.6 * k)).fill({ color: q.color, alpha });
+      }
+    }
   }
 
   // ───────────── 입력 ─────────────
@@ -360,10 +491,15 @@ export class BoardRenderer {
     this.tweens.push({ t: 0, dur, update, done });
   }
 
+  private after(ms: number, fn: () => void) {
+    this.tween(ms, () => {}, fn);
+  }
+
   private tick(dt: number) {
     this.clock += dt;
     for (let i = this.tweens.length - 1; i >= 0; i--) {
       const tw = this.tweens[i];
+      if (!tw) continue;
       tw.t += dt;
       const p = Math.min(1, tw.t / tw.dur);
       tw.update(p);
@@ -372,8 +508,16 @@ export class BoardRenderer {
         this.tweens.splice(i, 1);
       }
     }
-    // 승리선은 천천히 숨 쉬듯 빛난다
-    if (this.state.winLine) this.winG.alpha = 0.78 + Math.sin(this.clock / 260) * 0.22;
+    this.drawBursts(dt);
+    if (this.shake > 0.05) {
+      this.app.stage.position.set((Math.random() - 0.5) * 2 * this.shake, (Math.random() - 0.5) * 2 * this.shake);
+      this.shake *= Math.pow(0.002, dt / 1000);
+    } else if (this.shake) {
+      this.shake = 0;
+      this.app.stage.position.set(0, 0);
+    }
+    // 승리선은 떠오른 뒤 천천히 숨 쉬듯 빛난다
+    if (this.state.winLine) this.winG.alpha = this.winGlow * (0.78 + Math.sin(this.clock / 260) * 0.22);
     // 마지막 수 표시가 살짝 맥박친다
     this.marker.alpha = 0.75 + Math.sin(this.clock / 300) * 0.25;
   }

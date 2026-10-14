@@ -80,3 +80,38 @@ export function playResult(win: boolean) {
     o.stop(t + 0.4);
   });
 }
+
+/** 5목 폭발음. i가 커질수록 조금씩 높아져 연쇄 폭발처럼 들린다 */
+export function playBurst(i: number) {
+  if (muted) return;
+  const ac = audio();
+  if (!ac) return;
+  const t = ac.currentTime;
+
+  const len = Math.floor(ac.sampleRate * 0.35);
+  const buf = ac.createBuffer(1, len, ac.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let n = 0; n < len; n++) data[n] = (Math.random() * 2 - 1) * Math.pow(1 - n / len, 2.5);
+  const noise = ac.createBufferSource();
+  noise.buffer = buf;
+  const low = ac.createBiquadFilter();
+  low.type = "lowpass";
+  low.frequency.setValueAtTime(3200 + i * 400, t);
+  low.frequency.exponentialRampToValueAtTime(300, t + 0.3);
+  const ng = ac.createGain();
+  ng.gain.value = 0.32;
+  noise.connect(low).connect(ng).connect(ac.destination);
+  noise.start(t);
+
+  const osc = ac.createOscillator();
+  osc.type = "sine";
+  const f = 150 * Math.pow(2, (i * 3) / 12);
+  osc.frequency.setValueAtTime(f * 1.6, t);
+  osc.frequency.exponentialRampToValueAtTime(f * 0.5, t + 0.22);
+  const og = ac.createGain();
+  og.gain.setValueAtTime(0.4, t);
+  og.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+  osc.connect(og).connect(ac.destination);
+  osc.start(t);
+  osc.stop(t + 0.26);
+}
