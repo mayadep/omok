@@ -19,6 +19,8 @@ interface StoneView {
 }
 
 const GOLD = 0xf3c969;
+/** 돌 지름 / 칸 크기. 1보다 작아야 이웃한 돌끼리 겹치지 않는다. */
+const STONE_RATIO = 0.9;
 const key = (x: number, y: number) => y * N + x;
 
 /** PixiJS 로 오목판을 그리고 입력을 받는다. React 와는 setState / setInput 으로만 만난다. */
@@ -143,7 +145,7 @@ export class BoardRenderer {
     this.wood.width = size;
     this.wood.height = size;
 
-    const d = this.cell * 0.92;
+    const d = this.cell * STONE_RATIO;
     const t = makeStoneTextures(d, this.res);
     this.textures?.black.destroy(true);
     this.textures?.white.destroy(true);
@@ -207,10 +209,12 @@ export class BoardRenderer {
     const tex = this.textures!;
     const stone = new Sprite(m.color === BLACK ? tex.black : tex.white);
     stone.anchor.set(0.5);
+    // 텍스처는 화면 해상도(res배)로 그려져 있으므로 크기를 칸 기준으로 직접 지정한다
+    stone.width = stone.height = this.cell * STONE_RATIO;
     stone.position.set(this.p(m.x), this.p(m.y));
     const shadow = new Sprite(tex.shadow);
     shadow.anchor.set(0.5);
-    shadow.width = shadow.height = this.cell * 0.92 * 1.7;
+    shadow.width = shadow.height = this.cell * STONE_RATIO * 1.7;
     shadow.position.set(this.p(m.x) + this.cell * 0.07, this.p(m.y) + this.cell * 0.1);
     this.stones.addChild(stone);
     this.shadows.addChild(shadow);
@@ -343,6 +347,7 @@ export class BoardRenderer {
     }
     const forbidden = this.state.forbidden.some((f) => f.x === h.x && f.y === h.y);
     this.ghost.texture = color === BLACK ? this.textures.black : this.textures.white;
+    this.ghost.width = this.ghost.height = this.cell * STONE_RATIO;
     this.ghost.position.set(this.p(h.x), this.p(h.y));
     this.ghost.tint = forbidden ? 0xff7a70 : 0xffffff;
     this.ghost.alpha = forbidden ? 0.3 : 0.55;
