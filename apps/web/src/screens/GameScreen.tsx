@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { BLACK, Game, WHITE, type Color } from "@omok/engine";
 import { BoardView } from "../board/BoardView";
+import { BURST_GAP } from "../board/BoardRenderer";
 import { TURN_SECONDS } from "../config";
 import { PlayerPanel } from "../components/PlayerPanel";
 import { ResultModal, type Reason } from "../components/ResultModal";
@@ -64,7 +65,7 @@ export function GameScreen({ opponent, onHome, onRematch }: Props) {
     setTimeout(() => {
       playResult(outcome === "win");
       setResult({ outcome, reason: game.status === "draw" ? "draw" : reason, ...delta });
-    }, 1100);
+    }, reason === "five" ? (game.winLine?.length ?? 5) * BURST_GAP + 1300 : 1100);
   };
 
   const applyMove = (x: number, y: number) => {

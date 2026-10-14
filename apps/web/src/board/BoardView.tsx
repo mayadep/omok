@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { Color } from "@omok/engine";
+import { playBurst } from "../sound";
 import { BoardRenderer, type BoardState } from "./BoardRenderer";
 
 interface Props extends BoardState {
@@ -19,7 +20,7 @@ export function BoardView({ moves, forbidden, winLine, inputColor, onPlace }: Pr
   useEffect(() => {
     const host = hostRef.current!;
     let cancelled = false;
-    BoardRenderer.create(host, { onPlace: (x, y) => placeRef.current(x, y) }).then((r) => {
+    BoardRenderer.create(host, { onPlace: (x, y) => placeRef.current(x, y), onBurst: playBurst }).then((r) => {
       if (cancelled) {
         r.destroy();
         return;
