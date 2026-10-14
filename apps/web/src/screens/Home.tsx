@@ -2,6 +2,7 @@ import { useState } from "react";
 import { rankFromRating } from "@omok/rating";
 import { Avatar, CHARACTERS } from "../components/Avatar";
 import { RankBadge } from "../components/RankBadge";
+import { MATCH_SECONDS } from "../config";
 import { fakeRanking } from "../opponents";
 import { setCharacter, useProfile } from "../profile";
 import { isMuted, setMuted } from "../sound";
@@ -75,7 +76,7 @@ export function Home({ onStart }: { onStart: () => void }) {
 
       {tab === "play" ? (
         <section className="play-section">
-          <p className="hint">비슷한 실력의 상대를 찾아요. 15초 안에 상대가 없으면 내 급수에 맞는 AI와 대국해요.</p>
+          <p className="hint">비슷한 실력의 상대를 찾아요. {MATCH_SECONDS}초 안에 상대가 없으면 내 급수에 맞는 AI와 대국해요.</p>
           <button className="primary-btn" onClick={onStart}>
             대전 시작
           </button>

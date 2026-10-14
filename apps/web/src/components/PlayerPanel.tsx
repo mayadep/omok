@@ -1,4 +1,5 @@
 import { BLACK, type Color } from "@omok/engine";
+import { URGENT_SECONDS } from "../config";
 import { Avatar } from "./Avatar";
 import { RankBadge } from "./RankBadge";
 
@@ -17,7 +18,7 @@ interface Props {
 }
 
 export function PlayerPanel({ position, id, character, rating, color, isAI, active, timeRatio, secondsLeft, note }: Props) {
-  const urgent = active && secondsLeft <= 8;
+  const urgent = active && secondsLeft <= URGENT_SECONDS;
   return (
     <section className={`player-panel ${position}${active ? " active" : ""}${urgent ? " urgent" : ""}`} aria-label={position === "top" ? "상대" : "나"}>
       <div className="avatar-wrap">

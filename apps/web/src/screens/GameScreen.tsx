@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { BLACK, Game, WHITE, type Color } from "@omok/engine";
 import { BoardView } from "../board/BoardView";
+import { TURN_SECONDS } from "../config";
 import { PlayerPanel } from "../components/PlayerPanel";
 import { ResultModal, type Reason } from "../components/ResultModal";
 import type { Opponent } from "../opponents";
@@ -9,7 +10,7 @@ import { isMuted, playResult, playStone, setMuted } from "../sound";
 import type { AiRequest, AiResponse } from "../ai.worker";
 import type { Rating } from "@omok/rating";
 
-const TURN_MS = 30_000;
+const TURN_MS = TURN_SECONDS * 1000;
 
 interface Result {
   outcome: Outcome;

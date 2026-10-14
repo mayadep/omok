@@ -2,13 +2,8 @@ import { useEffect, useState } from "react";
 import { Avatar } from "../components/Avatar";
 import { RankBadge } from "../components/RankBadge";
 import { makeAiOpponent, type Opponent } from "../opponents";
+import { MATCH_SECONDS } from "../config";
 import { useProfile } from "../profile";
-
-/** 상대를 기다리는 시간. 주소에 ?match=3 을 붙이면 3초로 줄여서 확인해 볼 수 있다. */
-const MATCH_SECONDS = (() => {
-  const v = Number(new URLSearchParams(location.search).get("match"));
-  return v > 0 ? v : 15;
-})();
 
 export function Matching({ onCancel, onMatched }: { onCancel: () => void; onMatched: (o: Opponent) => void }) {
   const profile = useProfile();
