@@ -1,0 +1,27 @@
+{
+  "name": "@omok/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc -p . && vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@omok/ai": "workspace:*",
+    "@omok/engine": "workspace:*",
+    "@omok/rating": "workspace:*",
+    "motion": "^11.15.0",
+    "pixi.js": "^8.6.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.7"
+  }
+}
