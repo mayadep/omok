@@ -47,6 +47,10 @@ const BURST_TAIL = 250;
 const SPARK_COLORS = [0xf3c969, 0xfff3c4, 0xffb347, 0xff7a3d, 0xffffff];
 /** 돌 지름 / 칸 크기. 1보다 작아야 이웃한 돌끼리 겹치지 않는다. */
 const STONE_RATIO = 0.9;
+/** 화면 폭 = 좌우 반칸 + 10칸. 나머지는 착수/이동 시 자동으로 움직여 보여준다 */
+const VISIBLE_CELLS = 11;
+/** 터치가 이만큼(px) 움직이면 착수가 아니라 판 이동으로 본다 */
+const DRAG_PX = 8;
 const key = (x: number, y: number) => y * N + x;
 
 /** PixiJS 로 오목판을 그리고 입력을 받는다. React 와는 setState / setInput 으로만 만난다. */
@@ -59,6 +63,10 @@ export class BoardRenderer {
 
   private size = 0;
   private cell = 0;
+  private world = new Container();
+  private pan = { x: 0, y: 0 };
+  private panTarget = { x: 0, y: 0 };
+  private drag: { gx: number; gy: number; px: number; py: number; moved: boolean } | null = null;
   private res = 1;
 
   private wood = new Sprite();
@@ -120,13 +128,17 @@ export class BoardRenderer {
     this.ghost.anchor.set(0.5);
     this.ghost.visible = false;
     this.ghost.alpha = 0.5;
-    stage.addChild(this.wood, this.grid, this.labels, this.forbiddenG, this.shadows, this.stones, this.marker, this.fx, this.winG, this.burstG, this.ghost);
+    this.world.addChild(this.wood, this.grid, this.labels, this.forbiddenG, this.shadows, this.stones, this.marker, this.fx, this.winG, this.burstG, this.ghost);
+    stage.addChild(this.world);
 
     stage.eventMode = "static";
     stage.on("pointermove", (e) => this.onMove(e));
     stage.on("pointerdown", (e) => this.onMove(e));
     stage.on("pointerup", (e) => this.onUp(e));
-    stage.on("pointerupoutside", () => this.setHover(null));
+    stage.on("pointerupoutside", () => {
+      this.drag = null;
+      this.setHover(null);
+    });
     stage.on("pointerleave", () => this.setHover(null));
 
     this.app.ticker.add((t) => this.tick(t.deltaMS));
@@ -168,15 +180,40 @@ export class BoardRenderer {
     return this.cell * (i + 1);
   }
 
+  private boardPx() {
+    return this.cell * (N + 1);
+  }
+
+  /** 드래그 중엔 판 안쪽으로만 제한, snap 이면 격자선이 항상 반칸 여백에 맞도록 칸 단위로 맞춘다 */
+  private clampPan(v: number, snap = true) {
+    const half = this.cell / 2;
+    if (!snap) return Math.min(Math.max(half, v), this.boardPx() - this.size - half);
+    const s = Math.round((v - half) / this.cell) * this.cell + half;
+    return Math.min(Math.max(half, s), this.boardPx() - this.size - half);
+  }
+
+  /** 마지막 수(없으면 판 가운데)가 화면 가운데 오도록 이동 */
+  private panToLast(animate: boolean) {
+    const last = this.state.moves[this.state.moves.length - 1];
+    const cx = last ? this.p(last.x) : this.boardPx() / 2;
+    const cy = last ? this.p(last.y) : this.boardPx() / 2;
+    this.panTarget = { x: this.clampPan(cx - this.size / 2), y: this.clampPan(cy - this.size / 2) };
+    if (!animate) {
+      this.pan = { ...this.panTarget };
+      this.world.position.set(-this.pan.x, -this.pan.y);
+    }
+  }
+
   private layout(size: number) {
     this.size = size;
-    this.cell = size / (N + 1);
+    this.cell = size / VISIBLE_CELLS;
+    const board = this.cell * (N + 1);
     this.app.renderer.resize(size, size);
     this.app.stage.hitArea = new Rectangle(0, 0, size, size);
 
-    this.wood.texture = Texture.from(makeWoodTexture(size, this.res));
-    this.wood.width = size;
-    this.wood.height = size;
+    this.wood.texture = Texture.from(makeWoodTexture(board, this.res));
+    this.wood.width = board;
+    this.wood.height = board;
 
     const d = this.cell * STONE_RATIO;
     const t = makeStoneTextures(d, this.res);
@@ -187,6 +224,7 @@ export class BoardRenderer {
 
     this.drawGrid();
     this.drawLabels();
+    this.panToLast(false);
 
     // 돌 스프라이트를 새 크기와 텍스처로 다시 만든다
     for (const v of this.views.values()) {
@@ -208,7 +246,7 @@ export class BoardRenderer {
     const line = Math.max(1, c * 0.045);
 
     // 판 테두리 안쪽 은은한 홈
-    g.rect(c * 0.45, c * 0.45, this.size - c * 0.9, this.size - c * 0.9).stroke({ width: line * 1.2, color: 0x6b3d12, alpha: 0.35 });
+    g.rect(c * 0.45, c * 0.45, this.boardPx() - c * 0.9, this.boardPx() - c * 0.9).stroke({ width: line * 1.2, color: 0x6b3d12, alpha: 0.35 });
 
     for (let i = 0; i < N; i++) {
       g.moveTo(this.p(0), this.p(i)).lineTo(this.p(N - 1), this.p(i));
@@ -229,7 +267,7 @@ export class BoardRenderer {
       const col = new Text({ text: String.fromCharCode(65 + i), style });
       col.alpha = 0.6;
       col.anchor.set(0.5);
-      col.position.set(this.p(i), this.size - this.cell * 0.4);
+      col.position.set(this.p(i), this.boardPx() - this.cell * 0.4);
       const row = new Text({ text: String(N - i), style });
       row.alpha = 0.6;
       row.anchor.set(0.5);
@@ -271,6 +309,7 @@ export class BoardRenderer {
       this.views.set(key(m.x, m.y), view);
       if (animate && i === moves.length - 1 && moves.length - this.known === 1) this.animateDrop(view, m);
     }
+    if (moves.length !== this.known) this.panToLast(true);
     this.known = moves.length;
     this.drawMarker();
     this.refreshGhost();
@@ -445,18 +484,34 @@ export class BoardRenderer {
   // ───────────── 입력 ─────────────
 
   private toGrid(e: FederatedPointerEvent): Point | null {
-    const x = Math.round(e.global.x / this.cell) - 1;
-    const y = Math.round(e.global.y / this.cell) - 1;
+    const x = Math.round((e.global.x + this.pan.x) / this.cell) - 1;
+    const y = Math.round((e.global.y + this.pan.y) / this.cell) - 1;
     if (x < 0 || y < 0 || x >= N || y >= N) return null;
     return { x, y };
   }
 
   private onMove(e: FederatedPointerEvent) {
+    if (e.type === "pointerdown") this.drag = { gx: e.global.x, gy: e.global.y, px: this.pan.x, py: this.pan.y, moved: false };
+    const d = this.drag;
+    if (d && (d.moved || Math.hypot(e.global.x - d.gx, e.global.y - d.gy) > DRAG_PX)) {
+      d.moved = true;
+      this.pan = { x: this.clampPan(d.px - (e.global.x - d.gx), false), y: this.clampPan(d.py - (e.global.y - d.gy), false) };
+      this.panTarget = { ...this.pan };
+      this.world.position.set(-this.pan.x, -this.pan.y);
+      this.setHover(null);
+      return;
+    }
     if (this.interactiveColor === null) return;
     this.setHover(this.toGrid(e));
   }
 
   private onUp(e: FederatedPointerEvent) {
+    const moved = this.drag?.moved;
+    this.drag = null;
+    if (moved) {
+      this.panTarget = { x: this.clampPan(this.pan.x), y: this.clampPan(this.pan.y) };
+      return;
+    }
     if (this.interactiveColor === null) return;
     const pt = this.toGrid(e);
     if (e.pointerType !== "mouse") this.setHover(null);
@@ -509,6 +564,12 @@ export class BoardRenderer {
       }
     }
     this.drawBursts(dt);
+    if (!this.drag?.moved && (this.pan.x !== this.panTarget.x || this.pan.y !== this.panTarget.y)) {
+      const k = 1 - Math.pow(0.001, dt / 1000);
+      const ease = (a: number, b: number) => (Math.abs(b - a) < 0.5 ? b : a + (b - a) * k);
+      this.pan = { x: ease(this.pan.x, this.panTarget.x), y: ease(this.pan.y, this.panTarget.y) };
+      this.world.position.set(-this.pan.x, -this.pan.y);
+    }
     if (this.shake > 0.05) {
       this.app.stage.position.set((Math.random() - 0.5) * 2 * this.shake, (Math.random() - 0.5) * 2 * this.shake);
       this.shake *= Math.pow(0.002, dt / 1000);
