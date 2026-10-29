@@ -30,6 +30,22 @@ pnpm test         # 엔진, AI, 레이팅 테스트
 pnpm build        # 웹 빌드
 ```
 
+### Rust AI (packages/ai-rs)
+
+AI 대국은 `packages/ai`를 Rust로 옮겨 WebAssembly로 컴파일한 `packages/ai-rs/omok_ai.wasm`을 쓴다.
+같은 알고리즘이라 시간 제한이 없으면 TS AI와 같은 수를 두고(`parity.test.ts`), 30~45배 빨라서
+같은 시간 안에 더 깊이 읽는다. wasm을 불러오지 못하면 TS AI로 둔다.
+
+빌드된 `omok_ai.wasm`은 저장소에 커밋해 두므로 웹 빌드와 배포에는 Rust가 필요 없다.
+AI를 고쳤다면 Rust로 다시 빌드한다. 고칠 때는 `packages/ai`(TS)와 `packages/ai-rs`(Rust)를 같이 고쳐야 비교 테스트가 통과한다.
+
+```bash
+rustup target add wasm32-unknown-unknown       # 처음 한 번
+pnpm --filter @omok/ai-rs build:wasm           # omok_ai.wasm 다시 만들기
+cargo test --manifest-path packages/ai-rs/Cargo.toml
+BENCH=1 pnpm vitest run packages/ai-rs/src/bench.test.ts   # TS vs Rust 속도 비교
+```
+
 주소 끝에 `?match=3` 을 붙이면 매칭 대기를 3초로 줄여서 볼 수 있습니다.
 
 ## 구조
@@ -38,5 +54,6 @@ pnpm build        # 웹 빌드
 apps/web/          화면 (Vite + React + PixiJS)
 packages/engine/   규칙, 승리와 금수 판정 (화면, 서버, AI가 같이 씀)
 packages/ai/       AI 탐색과 난이도
+packages/ai-rs/    같은 AI의 Rust 판 (WebAssembly). 브라우저 AI는 이걸 쓴다
 packages/rating/   Glicko-2, 급수
 ```
