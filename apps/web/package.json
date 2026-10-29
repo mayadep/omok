@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@omok/ai": "workspace:*",
+    "@omok/ai-rs": "workspace:*",
     "@omok/engine": "workspace:*",
     "@omok/rating": "workspace:*",
     "motion": "^11.15.0",

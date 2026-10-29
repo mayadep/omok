@@ -1,0 +1,13 @@
+{
+  "name": "@omok/ai-rs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": { "@omok/ai": "workspace:*", "@omok/engine": "workspace:*" },
+  "scripts": {
+    "build:wasm": "cargo build --release --target wasm32-unknown-unknown && node -e \"require('fs').copyFileSync('target/wasm32-unknown-unknown/release/omok_ai.wasm', 'omok_ai.wasm')\"",
+    "typecheck": "tsc -p ."
+  }
+}

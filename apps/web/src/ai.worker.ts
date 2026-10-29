@@ -1,4 +1,6 @@
 import { AI_LEVELS, findMove } from "@omok/ai";
+import { createWasmAi, type WasmAi } from "@omok/ai-rs";
+import wasmUrl from "@omok/ai-rs/omok_ai.wasm?url";
 import type { Color, Rule } from "@omok/engine";
 
 export interface AiRequest {
@@ -21,8 +23,18 @@ const scope = self as unknown as {
   postMessage: (msg: AiResponse) => void;
 };
 
-scope.onmessage = (e) => {
+// Rust(WASM) AI를 쓴다. 불러오지 못하면 같은 알고리즘의 TS AI로 둔다
+const wasmAi: Promise<WasmAi | null> = fetch(wasmUrl)
+  .then((r) => r.arrayBuffer())
+  .then(createWasmAi)
+  .catch((err) => {
+    console.warn("WASM AI를 불러오지 못해 TS AI를 씁니다", err);
+    return null;
+  });
+
+scope.onmessage = async (e) => {
   const { id, board, color, rule, level } = e.data;
-  const move = findMove(board, color, rule, AI_LEVELS[level]);
+  const ai = (await wasmAi) ?? { findMove };
+  const move = ai.findMove(board, color, rule, AI_LEVELS[level]);
   scope.postMessage({ id, x: move.x, y: move.y });
 };
